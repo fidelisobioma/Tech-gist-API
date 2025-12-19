@@ -17,20 +17,26 @@ datasource db {
 
 model User {
   id        String   @id @default(cuid())
-  email     String   @unique
-  username  String   @unique
-  password  String
+  email     String?  @unique
+  username  String?  @unique
+  password  String?
   name      String?
-  bio       String?
   avatarUrl String?
   role      Role     @default(USER)
+
+  // 👇 OAuth fields
+  googleId  String?  @unique
+  provider  AuthProvider @default(LOCAL)
+
+  posts        Post[]
+  comments     Comment[]
+  likes        Like[]
+  commentLikes CommentLike[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  posts     Post[]
-  comments  Comment[]
-  likes     Like[]
 }
+
 
 model Post {
   id          String     @id @default(cuid())
@@ -44,12 +50,13 @@ model Post {
   updatedAt   DateTime   @updatedAt
 
   authorId    String
-  author      User       @relation(fields: [authorId], references: [id])
+  author      User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
   comments    Comment[]
   likes       Like[]
   tags        PostTag[]
   categories  PostCategory[]
+  media Media[]
 }
 
 model Comment {
@@ -60,9 +67,28 @@ model Comment {
   authorId  String
   postId    String
 
-  author    User     @relation(fields: [authorId], references: [id])
-  post      Post     @relation(fields: [postId], references: [id])
+  // 🔁 Self-relation for replies
+  parentId  String?
+  parent    Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[] @relation("CommentReplies")
+
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  likes     CommentLike[]
 }
+
+model CommentLike {
+  userId    String
+  commentId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId])
+}
+
 
 model Tag {
   id    String   @id @default(cuid())
@@ -74,7 +100,7 @@ model PostTag {
   postId String
   tagId  String
 
-  post   Post @relation(fields: [postId], references: [id])
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   tag    Tag  @relation(fields: [tagId], references: [id])
 
   @@id([postId, tagId])
@@ -90,25 +116,47 @@ model PostCategory {
   postId     String
   categoryId String
 
-  post       Post     @relation(fields: [postId], references: [id])
+  post       Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   category   Category @relation(fields: [categoryId], references: [id])
 
   @@id([postId, categoryId])
 }
 
 model Like {
-  id     String @id @default(cuid())
-
   userId String
   postId String
 
-  user   User @relation(fields: [userId], references: [id])
-  post   Post @relation(fields: [postId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, postId])
+  createdAt DateTime @default(now())
+
+  @@id([userId, postId])
+}
+
+model Media {
+  id        String    @id @default(cuid())
+  url       String
+  type      MediaType
+  createdAt DateTime  @default(now())
+
+  postId    String
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
 }
 
 enum Role {
   USER
   ADMIN
 }
+
+enum MediaType {
+  IMAGE
+  GIF
+  VIDEO
+}
+
